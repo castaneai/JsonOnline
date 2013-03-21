@@ -17,7 +17,7 @@ var server = new JsonOnline.Server();
 server.OnAccept += (_, client) => {
 
   client.On<Chat>((__, chat) => {
-    client.Broadcast(chat);
+    server.Broadcast(chat);
   });
 
 };
@@ -39,7 +39,8 @@ client.On<Chat>((_, msg) => {
 });
 
 client.Connect(IPAddress.Parse("127.0.0.1"), 8080);
-client.Send(new Chat { Name = "Yasuna", Message = "Baby, kill me please!" });
+var chat = new Chat { Name = "Yasuna", Message = "Baby, kill me please!" };
+client.Send(chat);
 ```
 
 Vendor Library
