@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // アセンブリに関する一般情報は以下の属性セットをとおして制御されます。
 // アセンブリに関連付けられている情報を変更するには、
 // これらの属性値を変更してください。
-[assembly: AssemblyTitle("JsonOnlineTestCUI")]
+[assembly: AssemblyTitle("ChatSampleServer")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("JsonOnlineTestCUI")]
+[assembly: AssemblyProduct("ChatSampleServer")]
 [assembly: AssemblyCopyright("Copyright ©  2013")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // 次の GUID は、このプロジェクトが COM に公開される場合の、typelib の ID です
-[assembly: Guid("ff6fb788-c011-4f1b-8bb2-737aae4d01a2")]
+[assembly: Guid("0cbad8aa-56fb-4471-8054-f14389ef927e")]
 
 // アセンブリのバージョン情報は、以下の 4 つの値で構成されています:
 //
