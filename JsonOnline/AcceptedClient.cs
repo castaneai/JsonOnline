@@ -9,7 +9,9 @@ namespace JsonOnline
 {
 	public class AcceptedClient : Client
 	{
-
+        /// <summary>
+        /// クライアントを識別するID
+        /// </summary>
 		public string Id
 		{
 			get
@@ -21,27 +23,39 @@ namespace JsonOnline
 			}
 		}
 
+        /// <summary>
+        /// 識別IDの材料　クライアント固有の情報にすること
+        /// </summary>
+        private string idSeed;
+
 		private string id;
 
+        /// <summary>
+        /// クライアントが接続しているサーバー
+        /// </summary>
 		private Server server;
+        
+        public void Connect(TcpClient baseClient)
+        {
+            this.idSeed = baseClient.Client.RemoteEndPoint.Serialize().ToString();
+            base.Connect(baseClient.GetStream());
+        }
 
-		internal AcceptedClient(Server server, TcpClient baseClient)
+		internal AcceptedClient(Server server)
 		{
 			this.server = server;
-			this.baseClient = baseClient;
-		}
-
-		public override void Connect(System.Net.IPEndPoint ep)
-		{
-			throw new NotSupportedException();
 		}
 
 		internal void ReceiveForever()
 		{
-			this.receiveForever();
+			this.readForever();
 		}
 
-		public void Broadcast(INetworkMessage message)
+        /// <summary>
+        /// 自身以外のすべてのクライアントにメッセージを送信する
+        /// </summary>
+        /// <param name="message"></param>
+		public void Broadcast(object message)
 		{
 			// 自分自身以外のすべてのクライアントにメッセージを送る
 			this.server.Broadcast(message, (client) => client != this);	
@@ -50,7 +64,7 @@ namespace JsonOnline
 		private string calculateClientId()
 		{
 			var sha256 = new System.Security.Cryptography.SHA256Cng();
-			var decryptedBytes = ASCIIEncoding.ASCII.GetBytes(this.baseClient.Client.RemoteEndPoint.Serialize().ToString());
+			var decryptedBytes = ASCIIEncoding.ASCII.GetBytes(idSeed);
 			var encryptedBytes = sha256.ComputeHash(decryptedBytes);
 			return BitConverter.ToString(encryptedBytes).Replace("-", "");
 		}

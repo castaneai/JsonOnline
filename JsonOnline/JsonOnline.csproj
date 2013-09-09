@@ -30,6 +30,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\packages\Newtonsoft.Json.5.0.6\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Runtime.Serialization" />
@@ -43,8 +46,10 @@
     <Compile Include="AcceptedClient.cs" />
     <Compile Include="Client.cs" />
     <Compile Include="INetworkMessage.cs" />
+    <Compile Include="MessageReader.cs" />
+    <Compile Include="MessageWriter.cs" />
+    <Compile Include="Packet.cs" />
     <Compile Include="Server.cs" />
-    <Compile Include="Vendor\DynamicJson.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

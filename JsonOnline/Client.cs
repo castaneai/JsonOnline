@@ -5,107 +5,105 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 using System.IO;
-using Codeplex.Data;
 using System.Collections.Concurrent;
+using Newtonsoft.Json;
 
 namespace JsonOnline
 {
-	public class Client
+	public class Client : IDisposable
 	{
-		public event Action<Client> OnDisconnect = delegate { };
+        /// <summary>
+        /// クライアントが切断されたときのイベント
+        /// </summary>
+		public event Action<Client> OnClosed = delegate { };
 
-		private class Packet
-		{
-			public string Type { get; set; }
-			public object Data { get; set; }
-		}
+        private MessageReader reader;
 
-		protected TcpClient baseClient;
+        private MessageWriter writer;
 
-		private StreamReader reader;
-
-		private StreamWriter writer;
-
-		private IDictionary<string, Delegate> receiveHandlers;
-
-		private IDictionary<string, Type> typeCache;
+        /// <summary>
+        /// メッセージ型とそれに応じたイベントハンドラの対応辞書
+        /// メッセージ型の完全名 -> イベントハンドラデリゲート　の構造になっている
+        /// </summary>
+        private readonly IDictionary<Type, Delegate> handlers;
 
 		public Client()
 		{
-			this.baseClient = new TcpClient();
-			this.receiveHandlers = new ConcurrentDictionary<string, Delegate>();
-			this.typeCache = new ConcurrentDictionary<string, Type>();
+			this.handlers = new ConcurrentDictionary<Type, Delegate>();
 		}
 
-		public virtual void Connect(System.Net.IPAddress ip, ushort port)
+        /// <summary>
+        /// 指定したアドレスに接続する
+        /// </summary>
+        /// <param name="ipAddress"></param>
+        /// <param name="port"></param>
+        public void Connect(System.Net.IPAddress ipAddress, ushort port)
+        {
+            var tcpClient = new System.Net.Sockets.TcpClient();
+            tcpClient.Connect(new System.Net.IPEndPoint(ipAddress, port));
+            Connect(tcpClient.GetStream());
+        }
+
+        /// <summary>
+        /// 指定したストリームに接続する
+        /// </summary>
+        /// <param name="stream"></param>
+        public virtual void Connect(Stream stream)
+        {
+            this.reader = new MessageReader(stream);
+            this.writer = new MessageWriter(stream);
+            readForeverAsync();
+        }
+
+        /// <summary>
+        /// 接続相手にメッセージを送信する
+        /// </summary>
+        /// <param name="message"></param>
+		public void Write(object message)
 		{
-			Connect(new System.Net.IPEndPoint(ip, port));
+            this.writer.Write(message);
 		}
 
-		public virtual void Connect(System.Net.IPEndPoint ep)
+        /// <summary>
+        /// 指定した型のメッセージを受け取ったとき呼び出すアクションを登録する
+        /// </summary>
+        /// <typeparam name="TNetworkMessage"></typeparam>
+        /// <param name="handler"></param>
+		public void On<T>(Action<Client, T> handler)
 		{
-			this.baseClient.Connect(ep);
-			receiveForeverAsync();
+            this.handlers[typeof(T)] = this.handlers.ContainsKey(typeof(T)) ?
+                Delegate.Combine(this.handlers[typeof(T)], handler) :
+                handler;
 		}
 
-		public void Close()
-		{
-			this.OnDisconnect(this);
-			this.baseClient.Close();
-		}
+        /// <summary>
+        /// 指定したメッセージ型のイベントハンドラを呼び出す
+        /// </summary>
+        /// <param name="messageType"></param>
+        /// <param name="packet">受信したパケット</param>
+        private void invokeHandlers(Packet packet)
+        {
+            var matchedPair = this.handlers.FirstOrDefault((pair) => pair.Key.FullName == packet.TypeName);
+            if (matchedPair.Equals(default(Dictionary<Type, Delegate>)) ||
+                matchedPair.Key == null) {
+                return;
+            }
+            var type = matchedPair.Key;
+            var handler = matchedPair.Value;
 
-		public void Send(INetworkMessage message)
-		{
-			if (this.writer == null) {
-				this.writer = new StreamWriter(this.baseClient.GetStream());	
-			}
-			var packet = new Packet {
-				Type = message.GetType().FullName,
-				Data = message,
-			};
-			var jsonString = DynamicJson.Serialize(packet);
-			writer.WriteLine(jsonString);
-			writer.Flush();
-		}
+            var message = JsonConvert.DeserializeObject(packet.Data, type);
+            handler.DynamicInvoke(this, message);
+        }
 
-		public void On<TNetworkMessage>(Action<Client, TNetworkMessage> handler)
-			where TNetworkMessage : INetworkMessage
+        /// <summary>
+        /// 受信を永久的に続け、受信するたびにハンドラがあれば実行する
+        /// </summary>
+		protected void readForever()
 		{
-			var messageTypeName = typeof(TNetworkMessage).FullName;
-
-			if (this.typeCache.ContainsKey(messageTypeName) == false) {
-				this.typeCache[messageTypeName] = typeof(TNetworkMessage);
-			}	
-			if (this.receiveHandlers.ContainsKey(messageTypeName) == false) {
-				this.receiveHandlers[messageTypeName] = handler;
-			}
-			else {
-				this.receiveHandlers[messageTypeName] = Delegate.Combine(
-					this.receiveHandlers[messageTypeName],
-					handler
-				);
-			}
-		}
-
-		protected void receiveForever()
-		{
-			if (this.reader == null) {
-				this.reader = new StreamReader(this.baseClient.GetStream());
-			}
 			try {
 				while (true) {
-					var jsonString = this.reader.ReadLine();
-					var json = DynamicJson.Parse(jsonString);
-					var messageTypeName = (string)json.Type;
-					if (this.typeCache.ContainsKey(messageTypeName) == false) {
-						throw new Exception("MessageType: " + messageTypeName + " Not Found in type cache dictionary. Did you set Client.On<" + messageTypeName + "> handlers?");
-					}
-					var messageType = this.typeCache[messageTypeName];
-					if (this.receiveHandlers.ContainsKey(messageTypeName)) {
-						var handlerDelegate = this.receiveHandlers[messageTypeName];
-						var message = ((DynamicJson)json.Data).Deserialize(messageType);
-						handlerDelegate.DynamicInvoke(this, message);
-					}
+                    var packet = reader.ReadNextPacket();
+                    invokeHandlers(packet);
 				}
 			}
 			catch (Exception e) {
@@ -117,9 +115,32 @@ namespace JsonOnline
 			}
 		}
 
-		protected void receiveForeverAsync()
+		private void readForeverAsync()
 		{
-			Task.Run(() => receiveForever());
+			Task.Run(() => readForever());
 		}
-	}
+
+        /// <summary>
+        /// オブジェクトの後始末をする
+        /// IDisposableの実装
+        /// </summary>
+        public void Dispose()
+        {
+            this.Close();
+        }
+
+        /// <summary>
+        /// クライアントを閉じる
+        /// </summary>
+        public void Close()
+        {
+            if (this.reader != null) {
+                this.reader.Close();
+            }
+            if (this.writer != null) {
+                this.writer.Close();
+            }
+            this.OnClosed(this);
+        }
+    }
 }

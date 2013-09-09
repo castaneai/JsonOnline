@@ -22,21 +22,21 @@ namespace JsonOnline
 			this.acceptedClients = new ConcurrentDictionary<string, AcceptedClient>(); 
 		}
 
-		public void Broadcast(INetworkMessage message)
+		public void Broadcast(object message)
 		{
-			foreach (var castee in this.acceptedClients.Select((pair) => pair.Value)) {
-				castee.Send(message);
+			foreach (var castee in this.acceptedClients.Values) {
+				castee.Write(message);
 			}
 		}
 
-		public void Broadcast(INetworkMessage message, Func<AcceptedClient, bool> predicate)
+		public void Broadcast(object message, Func<AcceptedClient, bool> predicate)
 		{
 			var castees = this.acceptedClients
 				.Select((pair) => pair.Value)
 				.Where(predicate);
 
 			foreach (var castee in castees) {
-				castee.Send(message);
+				castee.Write(message);
 			}
 		}
 
@@ -55,19 +55,15 @@ namespace JsonOnline
 		private void serveForever()
 		{
 			while (true) {
-				var acceptedClient = new AcceptedClient(this, this.baseListener.AcceptTcpClient());
-				acceptedClient.OnDisconnect += (client) => {
+                var acceptedTcpClient = this.baseListener.AcceptTcpClient();
+                var acceptedClient = new AcceptedClient(this);
+				acceptedClient.OnClosed += (client) => {
 					this.acceptedClients.Remove(acceptedClient.Id);
 				};
+                acceptedClient.Connect(acceptedTcpClient);
 				this.OnAccept(this, acceptedClient);
-				Task.Run(() => processAcceptedClient(acceptedClient));
+                this.acceptedClients.Add(acceptedClient.Id, acceptedClient);
 			}
-		}
-
-		private void processAcceptedClient(AcceptedClient client)
-		{
-			this.acceptedClients.Add(client.Id, client);
-			client.ReceiveForever();
 		}
 	}
 }
